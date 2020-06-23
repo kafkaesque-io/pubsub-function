@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/kafkaesque-io/pulsar-beam/src/util"
+	"github.com/kafkaesque-io/pubsub-function/src/util"
 	log "github.com/sirupsen/logrus"
 )
 

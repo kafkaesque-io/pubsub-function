@@ -4,19 +4,16 @@ import (
 	"flag"
 	"os"
 
-	"github.com/kafkaesque-io/pubsub-function/src/broker"
 	"github.com/kafkaesque-io/pubsub-function/src/route"
 	"github.com/kafkaesque-io/pubsub-function/src/util"
 	"github.com/rs/cors"
 	log "github.com/sirupsen/logrus"
-
-	_ "github.com/kafkaesque-io/pubsub-function/src/docs" // This line is required for go-swagger to find docs
 )
 
 var mode = util.AssignString(os.Getenv("ProcessMode"), *flag.String("mode", "hybrid", "server running mode"))
 
 func main() {
-	exit := make(chan bool) // future use to exit the main program if in broker only mode
+	exit := make(chan bool)
 	util.Init()
 
 	flag.Parse()
@@ -25,9 +22,6 @@ func main() {
 		log.Panic("Unsupported server mode")
 	}
 
-	if util.IsBrokerRequired(&mode) {
-		broker.Init()
-	}
 	if util.IsHTTPRouterRequired(&mode) {
 		route.Init()
 
@@ -47,10 +41,8 @@ func main() {
 		log.Fatal(util.ListenAndServeTLS(":"+port, certFile, keyFile, handler))
 	}
 
-	for util.IsBroker(&mode) {
-		select {
-		case <-exit:
-			os.Exit(2)
-		}
+	select {
+	case <-exit:
+		os.Exit(2)
 	}
 }

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/kafkaesque-io/pulsar-beam/src/model"
-	"github.com/kafkaesque-io/pulsar-beam/src/pulsardriver"
-	"github.com/kafkaesque-io/pulsar-beam/src/util"
+	"github.com/kafkaesque-io/pubsub-function/src/model"
+	"github.com/kafkaesque-io/pubsub-function/src/pulsardriver"
+	"github.com/kafkaesque-io/pubsub-function/src/util"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -28,8 +28,8 @@ import (
 // the signal to track if the liveness of the reader process
 type liveSignal struct{}
 
-// a map of TopicConfig struct with Key, hash of pulsar URL and topic full name, is the key
-// var topics = make(map[string]model.TopicConfig)
+// a map of PulsarFunctionConfig struct with Key, hash of pulsar URL and topic full name, is the key
+// var topics = make(map[string]model.PulsarFunctionConfig)
 
 // PulsarHandler is the Pulsar database driver
 type PulsarHandler struct {
@@ -39,14 +39,14 @@ type PulsarHandler struct {
 	topicsLock  sync.RWMutex
 	client      pulsar.Client
 	producer    pulsar.Producer
-	topics      map[string]model.TopicConfig
+	topics      map[string]model.PulsarFunctionConfig
 	logger      *log.Entry
 }
 
 //Init is a Db interface method.
 func (s *PulsarHandler) Init() error {
 	s.logger = log.WithFields(log.Fields{"app": "pulsardb"})
-	s.topics = make(map[string]model.TopicConfig)
+	s.topics = make(map[string]model.PulsarFunctionConfig)
 
 	s.logger.Infof("database pulsar URL: %s", s.PulsarURL)
 	if log.GetLevel() == log.DebugLevel {
@@ -109,18 +109,18 @@ func (s *PulsarHandler) dbListener(sig chan *liveSignal) error {
 			log.Errorf("dbListener reader.Next() error %v", err)
 			return err
 		}
-		doc := model.TopicConfig{}
+		doc := model.PulsarFunctionConfig{}
 		if err = json.Unmarshal(data.Payload(), &doc); err != nil {
 			s.logger.Errorf("dblistener reader unmarshal error %v", err)
 			// ignore error and move on
 		} else {
 			s.topicsLock.Lock()
 			defer s.topicsLock.Unlock()
-			if doc.TopicStatus != model.Deleted {
-				s.logger.Infof("add topic configuration %s", doc.Key)
-				s.topics[doc.Key] = doc
+			if doc.FunctionStatus != model.Deleted {
+				s.logger.Infof("add topic configuration %s", doc.ID)
+				s.topics[doc.ID] = doc
 			} else {
-				delete(s.topics, doc.Key)
+				delete(s.topics, doc.ID)
 			}
 		}
 	}
@@ -169,7 +169,7 @@ func NewPulsarHandler() (*PulsarHandler, error) {
 }
 
 // Create creates a new document
-func (s *PulsarHandler) Create(topicCfg *model.TopicConfig) (string, error) {
+func (s *PulsarHandler) Create(topicCfg *model.PulsarFunctionConfig) (string, error) {
 	key, err := getKey(topicCfg)
 	if err != nil {
 		return key, err
@@ -179,14 +179,14 @@ func (s *PulsarHandler) Create(topicCfg *model.TopicConfig) (string, error) {
 		return key, errors.New(DocAlreadyExisted)
 	}
 
-	topicCfg.Key = key
+	topicCfg.ID = key
 	topicCfg.CreatedAt = time.Now()
 	topicCfg.UpdatedAt = topicCfg.CreatedAt
 
 	return s.updateCacheAndPulsar(topicCfg)
 }
 
-func (s *PulsarHandler) updateCacheAndPulsar(topicCfg *model.TopicConfig) (string, error) {
+func (s *PulsarHandler) updateCacheAndPulsar(topicCfg *model.PulsarFunctionConfig) (string, error) {
 
 	ctx := context.Background()
 	data, err := json.Marshal(*topicCfg)
@@ -195,7 +195,7 @@ func (s *PulsarHandler) updateCacheAndPulsar(topicCfg *model.TopicConfig) (strin
 	}
 	msg := pulsar.ProducerMessage{
 		Payload: data,
-		Key:     topicCfg.Key,
+		Key:     topicCfg.ID,
 	}
 
 	if _, err = s.producer.Send(ctx, &msg); err != nil {
@@ -203,32 +203,32 @@ func (s *PulsarHandler) updateCacheAndPulsar(topicCfg *model.TopicConfig) (strin
 	}
 	// s.producer.Flush() do not use it's a blocking call
 
-	s.logger.Infof("send to Pulsar %s", topicCfg.Key)
+	s.logger.Infof("send to Pulsar %s", topicCfg.ID)
 
-	s.topics[topicCfg.Key] = *topicCfg
-	return topicCfg.Key, nil
+	s.topics[topicCfg.ID] = *topicCfg
+	return topicCfg.ID, nil
 }
 
 // GetByTopic gets a document by the topic name and pulsar URL
-func (s *PulsarHandler) GetByTopic(topicFullName, pulsarURL string) (*model.TopicConfig, error) {
+func (s *PulsarHandler) GetByTopic(topicFullName, pulsarURL string) (*model.PulsarFunctionConfig, error) {
 	key, err := model.GetKeyFromNames(topicFullName, pulsarURL)
 	if err != nil {
-		return &model.TopicConfig{}, err
+		return &model.PulsarFunctionConfig{}, err
 	}
 	return s.GetByKey(key)
 }
 
 // GetByKey gets a document by the key
-func (s *PulsarHandler) GetByKey(hashedTopicKey string) (*model.TopicConfig, error) {
+func (s *PulsarHandler) GetByKey(hashedTopicKey string) (*model.PulsarFunctionConfig, error) {
 	if v, ok := s.topics[hashedTopicKey]; ok {
 		return &v, nil
 	}
-	return &model.TopicConfig{}, errors.New(DocNotFound)
+	return &model.PulsarFunctionConfig{}, errors.New(DocNotFound)
 }
 
 // Load loads the entire database into memory
-func (s *PulsarHandler) Load() ([]*model.TopicConfig, error) {
-	results := []*model.TopicConfig{}
+func (s *PulsarHandler) Load() ([]*model.PulsarFunctionConfig, error) {
+	results := []*model.PulsarFunctionConfig{}
 	for _, v := range s.topics {
 		results = append(results, &v)
 	}
@@ -236,7 +236,7 @@ func (s *PulsarHandler) Load() ([]*model.TopicConfig, error) {
 }
 
 // Update updates or creates a topic config document
-func (s *PulsarHandler) Update(topicCfg *model.TopicConfig) (string, error) {
+func (s *PulsarHandler) Update(topicCfg *model.PulsarFunctionConfig) (string, error) {
 	key, err := getKey(topicCfg)
 	if err != nil {
 		return key, err
@@ -249,10 +249,8 @@ func (s *PulsarHandler) Update(topicCfg *model.TopicConfig) (string, error) {
 	v := s.topics[key]
 	v.Token = topicCfg.Token
 	v.Tenant = topicCfg.Tenant
-	v.Notes = topicCfg.Notes
-	v.TopicStatus = topicCfg.TopicStatus
+	v.FunctionStatus = topicCfg.FunctionStatus
 	v.UpdatedAt = time.Now()
-	v.Webhooks = topicCfg.Webhooks
 
 	s.logger.Infof("upsert %s", key)
 	return s.updateCacheAndPulsar(topicCfg)
@@ -275,7 +273,7 @@ func (s *PulsarHandler) DeleteByKey(hashedTopicKey string) (string, error) {
 	}
 
 	v := s.topics[hashedTopicKey]
-	v.TopicStatus = model.Deleted
+	v.FunctionStatus = model.Deleted
 
 	ctx := context.Background()
 	data, err := json.Marshal(v)
@@ -285,13 +283,13 @@ func (s *PulsarHandler) DeleteByKey(hashedTopicKey string) (string, error) {
 
 	msg := pulsar.ProducerMessage{
 		Payload: data,
-		Key:     v.Key,
+		Key:     v.ID,
 	}
 
 	if _, err = s.producer.Send(ctx, &msg); err != nil {
 		return "", err
 	}
 
-	delete(s.topics, v.Key)
+	delete(s.topics, v.ID)
 	return hashedTopicKey, nil
 }

@@ -3,7 +3,7 @@ package db
 import (
 	"errors"
 
-	"github.com/kafkaesque-io/pulsar-beam/src/model"
+	"github.com/kafkaesque-io/pubsub-function/src/model"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -46,8 +46,6 @@ func NewDb(reqDbType string) (Db, error) {
 
 	var err error
 	switch reqDbType {
-	case "mongo":
-		dbConn, err = NewMongoDb()
 	case "pulsarAsDb":
 		dbConn, err = NewPulsarHandler()
 	case "inmemory":
@@ -72,3 +70,7 @@ var DocNotFound = "no document found"
 
 // DocAlreadyExisted means document already existed in the database when a new creation is requested
 var DocAlreadyExisted = "document already existed"
+
+func getKey(cfg *model.PulsarFunctionConfig) (string, error) {
+	return cfg.Tenant + cfg.Name, nil
+}

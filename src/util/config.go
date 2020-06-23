@@ -12,7 +12,7 @@ import (
 	"unicode"
 
 	"github.com/ghodss/yaml"
-	"github.com/kafkaesque-io/pulsar-beam/src/icrypto"
+	"github.com/kafkaesque-io/pubsub-function/src/icrypto"
 	log "github.com/sirupsen/logrus"
 )
 

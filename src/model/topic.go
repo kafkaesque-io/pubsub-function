@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/kafkaesque-io/pulsar-beam/src/icrypto"
+	"github.com/kafkaesque-io/pubsub-function/src/icrypto"
 )
 
 // Status can be used for webhook status
@@ -63,6 +63,8 @@ type PulsarFunctionConfig struct {
 	Name             string        `json:"name"`
 	ID               string        `json:"id"`
 	Tenant           string        `json:"tenant"`
+	Token            string        `json:"token"`
+	FunctionStatus   Status        `json:"functionStatus"`
 	FunctionFilePath string        `json:"functionFilePath"`
 	LanguagePack     string        `json:"languagePack"`
 	Parallelism      int           `json:"parallelism"`
@@ -72,6 +74,9 @@ type PulsarFunctionConfig struct {
 	LogTopic         FunctionTopic `json:"logTopic"`
 	TriggerType      string        `json:"triggerType"`
 	Cron             string        `json:"cron"`
+	CreatedAt        time.Time     `json:"createdAt"`
+	UpdatedAt        time.Time     `json:"updatedAt"`
+	DeletedAt        time.Time     `json:"deletedAt"`
 }
 
 // FunctionTopic is the topic configurtion for function

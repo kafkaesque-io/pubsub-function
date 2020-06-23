@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/kafkaesque-io/pulsar-beam/src/model"
+	"github.com/kafkaesque-io/pubsub-function/src/model"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -17,14 +17,14 @@ import (
 
 // InMemoryHandler is the in memory cache driver
 type InMemoryHandler struct {
-	topics map[string]model.TopicConfig
+	topics map[string]model.PulsarFunctionConfig
 	logger *log.Entry
 }
 
 //Init is a Db interface method.
 func (s *InMemoryHandler) Init() error {
 	s.logger = log.WithFields(log.Fields{"app": "inmemory-db"})
-	s.topics = make(map[string]model.TopicConfig)
+	s.topics = make(map[string]model.PulsarFunctionConfig)
 	return nil
 }
 
@@ -51,7 +51,7 @@ func NewInMemoryHandler() (*InMemoryHandler, error) {
 }
 
 // Create creates a new document
-func (s *InMemoryHandler) Create(topicCfg *model.TopicConfig) (string, error) {
+func (s *InMemoryHandler) Create(topicCfg *model.PulsarFunctionConfig) (string, error) {
 	key, err := getKey(topicCfg)
 	if err != nil {
 		return key, err
@@ -61,34 +61,34 @@ func (s *InMemoryHandler) Create(topicCfg *model.TopicConfig) (string, error) {
 		return key, errors.New(DocAlreadyExisted)
 	}
 
-	topicCfg.Key = key
+	topicCfg.ID = key
 	topicCfg.CreatedAt = time.Now()
 	topicCfg.UpdatedAt = topicCfg.CreatedAt
 
-	s.topics[topicCfg.Key] = *topicCfg
+	s.topics[topicCfg.ID] = *topicCfg
 	return key, nil
 }
 
 // GetByTopic gets a document by the topic name and pulsar URL
-func (s *InMemoryHandler) GetByTopic(topicFullName, pulsarURL string) (*model.TopicConfig, error) {
+func (s *InMemoryHandler) GetByTopic(topicFullName, pulsarURL string) (*model.PulsarFunctionConfig, error) {
 	key, err := model.GetKeyFromNames(topicFullName, pulsarURL)
 	if err != nil {
-		return &model.TopicConfig{}, err
+		return &model.PulsarFunctionConfig{}, err
 	}
 	return s.GetByKey(key)
 }
 
 // GetByKey gets a document by the key
-func (s *InMemoryHandler) GetByKey(hashedTopicKey string) (*model.TopicConfig, error) {
+func (s *InMemoryHandler) GetByKey(hashedTopicKey string) (*model.PulsarFunctionConfig, error) {
 	if v, ok := s.topics[hashedTopicKey]; ok {
 		return &v, nil
 	}
-	return &model.TopicConfig{}, errors.New(DocNotFound)
+	return &model.PulsarFunctionConfig{}, errors.New(DocNotFound)
 }
 
 // Load loads the entire database as a list
-func (s *InMemoryHandler) Load() ([]*model.TopicConfig, error) {
-	results := []*model.TopicConfig{}
+func (s *InMemoryHandler) Load() ([]*model.PulsarFunctionConfig, error) {
+	results := []*model.PulsarFunctionConfig{}
 	for _, v := range s.topics {
 		results = append(results, &v)
 	}
@@ -96,7 +96,7 @@ func (s *InMemoryHandler) Load() ([]*model.TopicConfig, error) {
 }
 
 // Update updates or creates a topic config document
-func (s *InMemoryHandler) Update(topicCfg *model.TopicConfig) (string, error) {
+func (s *InMemoryHandler) Update(topicCfg *model.PulsarFunctionConfig) (string, error) {
 	key, err := getKey(topicCfg)
 	if err != nil {
 		return key, err
@@ -109,13 +109,12 @@ func (s *InMemoryHandler) Update(topicCfg *model.TopicConfig) (string, error) {
 	v := s.topics[key]
 	v.Token = topicCfg.Token
 	v.Tenant = topicCfg.Tenant
-	v.Notes = topicCfg.Notes
-	v.TopicStatus = topicCfg.TopicStatus
+	v.FunctionStatus = topicCfg.FunctionStatus
 	v.UpdatedAt = time.Now()
-	v.Webhooks = topicCfg.Webhooks
+	// v.Webhooks = topicCfg.Webhooks
 
 	s.logger.Infof("upsert %s", key)
-	s.topics[topicCfg.Key] = *topicCfg
+	s.topics[topicCfg.ID] = *topicCfg
 	return key, nil
 
 }

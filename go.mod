@@ -1,4 +1,4 @@
-module github.com/kafkaesque-io/pulsar-beam
+module github.com/kafkaesque-io/pubsub-function
 
 go 1.13
 
