@@ -37,7 +37,7 @@ var functionInstances = make(map[string]FunctionInstance)
 var port = 2999
 
 // CreateFnInstance creates function instance
-func CreateFnInstance(cfg model.PulsarFunctionConfig) (string, error) {
+func CreateFnInstance(cfg model.FunctionConfig) (string, error) {
 	// if "linux" != runtime.GOOS {
 	switch strings.ToLower(cfg.LanguagePack) {
 	case "js", "javascript", "node", "nodejs":
@@ -48,7 +48,7 @@ func CreateFnInstance(cfg model.PulsarFunctionConfig) (string, error) {
 }
 
 // StartNodeInstance starts node/javascript instance
-func StartNodeInstance(cfg model.PulsarFunctionConfig) (url string, err error) {
+func StartNodeInstance(cfg model.FunctionConfig) (url string, err error) {
 	port, err = getPort()
 	if err != nil {
 		return "", err
@@ -90,7 +90,7 @@ func GetSourceFilePath(tenant string) string {
 
 	path := util.AssignString(os.Getenv("FunctionBaseDir"), "/pulsar/functions") + "/" + tenant
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		os.Mkdir(path, 777)
+		os.Mkdir(path, 0755)
 	}
 
 	return path
@@ -130,7 +130,4 @@ func HealthCheckRetry(url string, retries int) error {
 		}
 	}
 	return fmt.Errorf("health check %s failed with %d number of retry has been reached", url, retries)
-}
-
-func RegisterPulsarConsumer(doc model.PulsarFunctionConfig) {
 }

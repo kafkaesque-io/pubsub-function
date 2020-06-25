@@ -120,6 +120,7 @@ func NewPulsarClient(url, tokenStr string) (pulsar.Client, error) {
 	clientOpt.TLSAllowInsecureConnection = util.StringToBool(os.Getenv("PulsarTLSAllowInsecureConnection"))
 	clientOpt.TLSValidateHostname = util.StringToBool(os.Getenv("PulsarTLSValidateHostname"))
 
+	fmt.Printf("pulsar client options %v", clientOpt)
 	driver, err := pulsar.NewClient(clientOpt)
 
 	if err != nil {

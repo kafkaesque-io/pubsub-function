@@ -17,14 +17,14 @@ import (
 
 // InMemoryHandler is the in memory cache driver
 type InMemoryHandler struct {
-	topics map[string]model.PulsarFunctionConfig
-	logger *log.Entry
+	functions map[string]model.FunctionConfig
+	logger    *log.Entry
 }
 
 //Init is a Db interface method.
 func (s *InMemoryHandler) Init() error {
 	s.logger = log.WithFields(log.Fields{"app": "inmemory-db"})
-	s.topics = make(map[string]model.PulsarFunctionConfig)
+	s.functions = make(map[string]model.FunctionConfig)
 	return nil
 }
 
@@ -51,77 +51,78 @@ func NewInMemoryHandler() (*InMemoryHandler, error) {
 }
 
 // Create creates a new document
-func (s *InMemoryHandler) Create(topicCfg *model.PulsarFunctionConfig) (string, error) {
-	key, err := getKey(topicCfg)
+func (s *InMemoryHandler) Create(functionCfg *model.FunctionConfig) (string, error) {
+	key, err := getKey(functionCfg)
 	if err != nil {
 		return key, err
 	}
 
-	if _, ok := s.topics[key]; ok {
+	if _, ok := s.functions[key]; ok {
 		return key, errors.New(DocAlreadyExisted)
 	}
 
-	topicCfg.ID = key
-	topicCfg.CreatedAt = time.Now()
-	topicCfg.UpdatedAt = topicCfg.CreatedAt
+	functionCfg.ID = key
+	functionCfg.CreatedAt = time.Now()
+	functionCfg.UpdatedAt = functionCfg.CreatedAt
 
-	s.topics[topicCfg.ID] = *topicCfg
+	s.functions[functionCfg.ID] = *functionCfg
+	log.Infof("created a function %s database size %d", functionCfg.ID, len(s.functions))
 	return key, nil
 }
 
 // GetByTopic gets a document by the topic name and pulsar URL
-func (s *InMemoryHandler) GetByTopic(topicFullName, pulsarURL string) (*model.PulsarFunctionConfig, error) {
-	key, err := model.GetKeyFromNames(topicFullName, pulsarURL)
+func (s *InMemoryHandler) GetByTopic(tenant, functionName string) (*model.FunctionConfig, error) {
+	key, err := model.GetKeyFromNames(tenant, functionName)
 	if err != nil {
-		return &model.PulsarFunctionConfig{}, err
+		return &model.FunctionConfig{}, err
 	}
 	return s.GetByKey(key)
 }
 
 // GetByKey gets a document by the key
-func (s *InMemoryHandler) GetByKey(hashedTopicKey string) (*model.PulsarFunctionConfig, error) {
-	if v, ok := s.topics[hashedTopicKey]; ok {
+func (s *InMemoryHandler) GetByKey(hashedTopicKey string) (*model.FunctionConfig, error) {
+	if v, ok := s.functions[hashedTopicKey]; ok {
 		return &v, nil
 	}
-	return &model.PulsarFunctionConfig{}, errors.New(DocNotFound)
+	return &model.FunctionConfig{}, errors.New(DocNotFound)
 }
 
 // Load loads the entire database as a list
-func (s *InMemoryHandler) Load() ([]*model.PulsarFunctionConfig, error) {
-	results := []*model.PulsarFunctionConfig{}
-	for _, v := range s.topics {
+func (s *InMemoryHandler) Load() ([]*model.FunctionConfig, error) {
+	results := []*model.FunctionConfig{}
+	for _, v := range s.functions {
 		results = append(results, &v)
 	}
+	log.Infof("load database table size %d", len(results))
 	return results, nil
 }
 
 // Update updates or creates a topic config document
-func (s *InMemoryHandler) Update(topicCfg *model.PulsarFunctionConfig) (string, error) {
-	key, err := getKey(topicCfg)
+func (s *InMemoryHandler) Update(functionCfg *model.FunctionConfig) (string, error) {
+	key, err := getKey(functionCfg)
 	if err != nil {
 		return key, err
 	}
 
-	if _, ok := s.topics[key]; !ok {
-		return s.Create(topicCfg)
+	if _, ok := s.functions[key]; !ok {
+		return s.Create(functionCfg)
 	}
 
-	v := s.topics[key]
-	v.Token = topicCfg.Token
-	v.Tenant = topicCfg.Tenant
-	v.FunctionStatus = topicCfg.FunctionStatus
+	v := s.functions[key]
+	v.Tenant = functionCfg.Tenant
+	v.FunctionStatus = functionCfg.FunctionStatus
 	v.UpdatedAt = time.Now()
-	// v.Webhooks = topicCfg.Webhooks
+	// v.Webhooks = functionCfg.Webhooks
 
 	s.logger.Infof("upsert %s", key)
-	s.topics[topicCfg.ID] = *topicCfg
+	s.functions[functionCfg.ID] = *functionCfg
 	return key, nil
 
 }
 
 // Delete deletes a document
-func (s *InMemoryHandler) Delete(topicFullName, pulsarURL string) (string, error) {
-	key, err := model.GetKeyFromNames(topicFullName, pulsarURL)
+func (s *InMemoryHandler) Delete(tenant, functionName string) (string, error) {
+	key, err := model.GetKeyFromNames(tenant, functionName)
 	if err != nil {
 		return "", err
 	}
@@ -130,10 +131,10 @@ func (s *InMemoryHandler) Delete(topicFullName, pulsarURL string) (string, error
 
 // DeleteByKey deletes a document based on key
 func (s *InMemoryHandler) DeleteByKey(hashedTopicKey string) (string, error) {
-	if _, ok := s.topics[hashedTopicKey]; !ok {
+	if _, ok := s.functions[hashedTopicKey]; !ok {
 		return "", errors.New(DocNotFound)
 	}
 
-	delete(s.topics, hashedTopicKey)
+	delete(s.functions, hashedTopicKey)
 	return hashedTopicKey, nil
 }

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/gorilla/mux"
@@ -257,10 +258,23 @@ func UpdateFunctionHandler(w http.ResponseWriter, r *http.Request) {
 		util.ResponseErrorJSON(err, w, http.StatusUnprocessableEntity)
 		return
 	}
+	tokenStr, _, pulsarURL, err := util.ReceiverHeader(util.AllowedPulsarURLs, &r.Header)
+	if err != nil {
+		util.ResponseErrorJSON(err, w, http.StatusUnauthorized)
+		return
+	}
 
-	doc := model.PulsarFunctionConfig{
-		Tenant: tenant,
-		ID:     tenant + functionName,
+	now := time.Now()
+	doc := model.FunctionConfig{
+		Name:           functionName,
+		Tenant:         tenant,
+		ID:             tenant + functionName,
+		LanguagePack:   util.AssignString(r.FormValue("language-pack"), "javascript"),
+		Parallelism:    util.GetEnvInt(r.FormValue("parallelism"), 1),
+		TriggerType:    util.AssignString(r.FormValue("trigger-type"), "pulsar-topic"),
+		FunctionStatus: model.StringToStatus(r.FormValue("function-status")),
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	file, fileReader, err := r.FormFile("source")
 	if file != nil {
@@ -270,15 +284,14 @@ func UpdateFunctionHandler(w http.ResponseWriter, r *http.Request) {
 		util.ResponseErrorJSON(err, w, http.StatusUnprocessableEntity)
 		return
 	}
-	languagePack := r.FormValue("language-pack")
-	parallelism := r.FormValue("parallelism")
-	triggerType := r.FormValue("trigger-type")
 
-	log.Infof("MIME Header: %+v\nUploaded File: %+v\nFile Size: %+v\n, languagePack %s, parallel instance %s, triggerType %s",
-		fileReader.Header, fileReader.Filename, fileReader.Size, languagePack, parallelism, triggerType)
-	if triggerType == "pulsar-topic" {
+	log.Infof("MIME Header: %+v\nUploaded File: %+v\nFile Size: %+v\n, languagePack %s, parallel instance %d, triggerType %s",
+		fileReader.Header, fileReader.Filename, fileReader.Size, doc.LanguagePack, doc.Parallelism, doc.TriggerType)
+	if doc.TriggerType == lambda.PulsarTrigger {
 		doc.InputTopic = model.FunctionTopic{
+			PulsarURL:        pulsarURL,
 			TopicFullName:    r.FormValue("input-topic"),
+			Token:            tokenStr,
 			Tenant:           tenant,
 			Subscription:     r.FormValue("subscription-name"),
 			SubscriptionType: r.FormValue("subscription-type"),
@@ -288,13 +301,11 @@ func UpdateFunctionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.FormValue("output-topic") != "" {
 		doc.OutputTopic = model.FunctionTopic{
+			PulsarURL:     pulsarURL,
+			Token:         tokenStr,
 			TopicFullName: r.FormValue("output-topic"),
 			Tenant:        tenant,
 		}
-	}
-
-	if triggerType == "pulsar-trigger" {
-		lambda.RegisterPulsarConsumer(doc)
 	}
 
 	// read all of the contents of our uploaded file into a byte array
@@ -303,9 +314,12 @@ func UpdateFunctionHandler(w http.ResponseWriter, r *http.Request) {
 		util.ResponseErrorJSON(err, w, http.StatusInternalServerError)
 		return
 	}
-	doc.FunctionFilePath = lambda.GetSourceFilePath(doc.Tenant) + "/test.js"
+	doc.FunctionFilePath = lambda.GetSourceFilePath(doc.Tenant) + "/" + functionName + ".js"
 	// write this byte array to our temporary file
-	err = ioutil.WriteFile(doc.FunctionFilePath, fileBytes, 0644)
+	if err = ioutil.WriteFile(doc.FunctionFilePath, fileBytes, 0644); err != nil {
+		util.ResponseErrorJSON(err, w, http.StatusInternalServerError)
+		return
+	}
 
 	functionURLs := []string{}
 	for i := 0; i < doc.Parallelism; i++ {
@@ -316,14 +330,37 @@ func UpdateFunctionHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// return that we have successfully uploaded our file!
-		fmt.Fprintf(w, "Successfully Uploaded File\n")
+		// fmt.Fprintf(w, "Successfully Uploaded File server started with url %s\n", url)
 		functionURLs = append(functionURLs, url)
 	}
 	doc.WebhookURLs = functionURLs
 
 	log.Infof("function metadata %v", doc)
 
-	w.WriteHeader(http.StatusOK)
+	id, err := singleDb.Update(&doc)
+	if err != nil {
+		util.ResponseErrorJSON(err, w, http.StatusConflict)
+		return
+	}
+	if len(id) > 1 {
+		savedDoc, err := singleDb.GetByKey(id)
+		if err != nil {
+			util.ResponseErrorJSON(err, w, http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		savedDoc.InputTopic.Token = "***"
+		savedDoc.OutputTopic.Token = "***"
+		savedDoc.LogTopic.Token = "***"
+		resJSON, err := json.Marshal(savedDoc)
+		if err != nil {
+			util.ResponseErrorJSON(err, w, http.StatusInternalServerError)
+			return
+		}
+		w.Write(resJSON)
+		return
+	}
+	util.ResponseErrorJSON(fmt.Errorf("failed to update"), w, http.StatusInternalServerError)
 }
 
 // DeleteFunctionHandler deletes a function

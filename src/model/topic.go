@@ -3,10 +3,8 @@ package model
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
@@ -58,12 +56,11 @@ type TopicConfig struct {
 	UpdatedAt     time.Time
 }
 
-// PulsarFunctionConfig is the function configuration
-type PulsarFunctionConfig struct {
+// FunctionConfig is the function configuration
+type FunctionConfig struct {
 	Name             string        `json:"name"`
 	ID               string        `json:"id"`
 	Tenant           string        `json:"tenant"`
-	Token            string        `json:"token"`
 	FunctionStatus   Status        `json:"functionStatus"`
 	FunctionFilePath string        `json:"functionFilePath"`
 	LanguagePack     string        `json:"languagePack"`
@@ -103,6 +100,20 @@ const (
 	NonResumable = "NonResumable"
 )
 
+// StringToStatus converts status in string to Status type
+func StringToStatus(status string) Status {
+	switch strings.ToLower(status) {
+	case "activated":
+		return Activated
+	case "suspended":
+		return Suspended
+	case "deleted":
+		return Deleted
+	default:
+		return Deactivated
+	}
+}
+
 // NewTopicConfig creates a topic configuration struct.
 func NewTopicConfig(topicFullName, pulsarURL, token string) (TopicConfig, error) {
 	cfg := TopicConfig{}
@@ -135,24 +146,14 @@ func NewWebhookConfig(URL string) WebhookConfig {
 }
 
 // GetKeyFromNames generate topic key based on topic full name and pulsar url
-func GetKeyFromNames(topicFullName, pulsarURL string) (string, error) {
-	url := strings.TrimSpace(pulsarURL)
-	name := strings.TrimSpace(topicFullName)
-	if url == "" || name == "" {
-		return "", errors.New("missing PulsarURL or TopicFullName")
-	}
-
-	re := regexp.MustCompile(`^(pulsar|pulsar\+ssl)?:\/\/[a-zA-Z0-9]+([\-\.]{1}[a-zA-Z0-9]+)*(:[0-9]{0,6})?$`)
-	if !re.MatchString(url) {
-		return "", fmt.Errorf("incorrect pulsar url format %s", url)
-	}
-	return GenKey(name, url), nil
+func GetKeyFromNames(tenant, functionName string) (string, error) {
+	return GenKey(tenant, functionName), nil
 }
 
 // GenKey generates a unique key based on pulsar url and topic full name
-func GenKey(topicFullName, pulsarURL string) string {
+func GenKey(tenant, functionName string) string {
 	h := sha1.New()
-	h.Write([]byte(topicFullName + pulsarURL))
+	h.Write([]byte(tenant + functionName))
 	return hex.EncodeToString(h.Sum(nil))
 }
 

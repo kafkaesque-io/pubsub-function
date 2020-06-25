@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 
+	"github.com/kafkaesque-io/pubsub-function/src/broker"
 	"github.com/kafkaesque-io/pubsub-function/src/route"
 	"github.com/kafkaesque-io/pubsub-function/src/util"
 	"github.com/rs/cors"
@@ -20,6 +21,10 @@ func main() {
 	log.Warnf("start server mode %s", mode)
 	if !util.IsValidMode(&mode) {
 		log.Panic("Unsupported server mode")
+	}
+
+	if util.IsBrokerRequired(&mode) {
+		broker.Init()
 	}
 
 	if util.IsHTTPRouterRequired(&mode) {

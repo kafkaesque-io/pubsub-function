@@ -17,8 +17,8 @@ import (
 )
 
 // DefaultConfigFile - default config file
-// it can be overwritten by env variable PULSAR_BEAM_CONFIG
-const DefaultConfigFile = "../config/pulsar_beam.yml"
+// it can be overwritten by env variable APP_CONFIG
+const DefaultConfigFile = "../config/app_config.yml"
 
 // Configuration has a set of parameters to configure the beam server.
 // The same name can be used in environment variable to override yml or json values.
@@ -102,7 +102,7 @@ var (
 
 // Init initializes configuration
 func Init() {
-	configFile := AssignString(os.Getenv("PULSAR_BEAM_CONFIG"), DefaultConfigFile)
+	configFile := AssignString(os.Getenv("APP_CONFIG"), DefaultConfigFile)
 	ReadConfigFile(configFile)
 
 	log.SetLevel(logLevel(Config.LogLevel))

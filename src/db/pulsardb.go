@@ -28,8 +28,8 @@ import (
 // the signal to track if the liveness of the reader process
 type liveSignal struct{}
 
-// a map of PulsarFunctionConfig struct with Key, hash of pulsar URL and topic full name, is the key
-// var topics = make(map[string]model.PulsarFunctionConfig)
+// a map of FunctionConfig struct with Key, hash of pulsar URL and topic full name, is the key
+// var topics = make(map[string]model.FunctionConfig)
 
 // PulsarHandler is the Pulsar database driver
 type PulsarHandler struct {
@@ -39,14 +39,14 @@ type PulsarHandler struct {
 	topicsLock  sync.RWMutex
 	client      pulsar.Client
 	producer    pulsar.Producer
-	topics      map[string]model.PulsarFunctionConfig
+	topics      map[string]model.FunctionConfig
 	logger      *log.Entry
 }
 
 //Init is a Db interface method.
 func (s *PulsarHandler) Init() error {
 	s.logger = log.WithFields(log.Fields{"app": "pulsardb"})
-	s.topics = make(map[string]model.PulsarFunctionConfig)
+	s.topics = make(map[string]model.FunctionConfig)
 
 	s.logger.Infof("database pulsar URL: %s", s.PulsarURL)
 	if log.GetLevel() == log.DebugLevel {
@@ -109,7 +109,7 @@ func (s *PulsarHandler) dbListener(sig chan *liveSignal) error {
 			log.Errorf("dbListener reader.Next() error %v", err)
 			return err
 		}
-		doc := model.PulsarFunctionConfig{}
+		doc := model.FunctionConfig{}
 		if err = json.Unmarshal(data.Payload(), &doc); err != nil {
 			s.logger.Errorf("dblistener reader unmarshal error %v", err)
 			// ignore error and move on
@@ -169,8 +169,8 @@ func NewPulsarHandler() (*PulsarHandler, error) {
 }
 
 // Create creates a new document
-func (s *PulsarHandler) Create(topicCfg *model.PulsarFunctionConfig) (string, error) {
-	key, err := getKey(topicCfg)
+func (s *PulsarHandler) Create(functionCfg *model.FunctionConfig) (string, error) {
+	key, err := getKey(functionCfg)
 	if err != nil {
 		return key, err
 	}
@@ -179,23 +179,23 @@ func (s *PulsarHandler) Create(topicCfg *model.PulsarFunctionConfig) (string, er
 		return key, errors.New(DocAlreadyExisted)
 	}
 
-	topicCfg.ID = key
-	topicCfg.CreatedAt = time.Now()
-	topicCfg.UpdatedAt = topicCfg.CreatedAt
+	functionCfg.ID = key
+	functionCfg.CreatedAt = time.Now()
+	functionCfg.UpdatedAt = functionCfg.CreatedAt
 
-	return s.updateCacheAndPulsar(topicCfg)
+	return s.updateCacheAndPulsar(functionCfg)
 }
 
-func (s *PulsarHandler) updateCacheAndPulsar(topicCfg *model.PulsarFunctionConfig) (string, error) {
+func (s *PulsarHandler) updateCacheAndPulsar(functionCfg *model.FunctionConfig) (string, error) {
 
 	ctx := context.Background()
-	data, err := json.Marshal(*topicCfg)
+	data, err := json.Marshal(*functionCfg)
 	if err != nil {
 		return "", err
 	}
 	msg := pulsar.ProducerMessage{
 		Payload: data,
-		Key:     topicCfg.ID,
+		Key:     functionCfg.ID,
 	}
 
 	if _, err = s.producer.Send(ctx, &msg); err != nil {
@@ -203,32 +203,32 @@ func (s *PulsarHandler) updateCacheAndPulsar(topicCfg *model.PulsarFunctionConfi
 	}
 	// s.producer.Flush() do not use it's a blocking call
 
-	s.logger.Infof("send to Pulsar %s", topicCfg.ID)
+	s.logger.Infof("send to Pulsar %s", functionCfg.ID)
 
-	s.topics[topicCfg.ID] = *topicCfg
-	return topicCfg.ID, nil
+	s.topics[functionCfg.ID] = *functionCfg
+	return functionCfg.ID, nil
 }
 
 // GetByTopic gets a document by the topic name and pulsar URL
-func (s *PulsarHandler) GetByTopic(topicFullName, pulsarURL string) (*model.PulsarFunctionConfig, error) {
-	key, err := model.GetKeyFromNames(topicFullName, pulsarURL)
+func (s *PulsarHandler) GetByTopic(tenant, functionName string) (*model.FunctionConfig, error) {
+	key, err := model.GetKeyFromNames(tenant, functionName)
 	if err != nil {
-		return &model.PulsarFunctionConfig{}, err
+		return &model.FunctionConfig{}, err
 	}
 	return s.GetByKey(key)
 }
 
 // GetByKey gets a document by the key
-func (s *PulsarHandler) GetByKey(hashedTopicKey string) (*model.PulsarFunctionConfig, error) {
+func (s *PulsarHandler) GetByKey(hashedTopicKey string) (*model.FunctionConfig, error) {
 	if v, ok := s.topics[hashedTopicKey]; ok {
 		return &v, nil
 	}
-	return &model.PulsarFunctionConfig{}, errors.New(DocNotFound)
+	return &model.FunctionConfig{}, errors.New(DocNotFound)
 }
 
 // Load loads the entire database into memory
-func (s *PulsarHandler) Load() ([]*model.PulsarFunctionConfig, error) {
-	results := []*model.PulsarFunctionConfig{}
+func (s *PulsarHandler) Load() ([]*model.FunctionConfig, error) {
+	results := []*model.FunctionConfig{}
 	for _, v := range s.topics {
 		results = append(results, &v)
 	}
@@ -236,30 +236,29 @@ func (s *PulsarHandler) Load() ([]*model.PulsarFunctionConfig, error) {
 }
 
 // Update updates or creates a topic config document
-func (s *PulsarHandler) Update(topicCfg *model.PulsarFunctionConfig) (string, error) {
-	key, err := getKey(topicCfg)
+func (s *PulsarHandler) Update(functionCfg *model.FunctionConfig) (string, error) {
+	key, err := getKey(functionCfg)
 	if err != nil {
 		return key, err
 	}
 
 	if _, ok := s.topics[key]; !ok {
-		return s.Create(topicCfg)
+		return s.Create(functionCfg)
 	}
 
 	v := s.topics[key]
-	v.Token = topicCfg.Token
-	v.Tenant = topicCfg.Tenant
-	v.FunctionStatus = topicCfg.FunctionStatus
+	v.Tenant = functionCfg.Tenant
+	v.FunctionStatus = functionCfg.FunctionStatus
 	v.UpdatedAt = time.Now()
 
 	s.logger.Infof("upsert %s", key)
-	return s.updateCacheAndPulsar(topicCfg)
+	return s.updateCacheAndPulsar(functionCfg)
 
 }
 
 // Delete deletes a document
-func (s *PulsarHandler) Delete(topicFullName, pulsarURL string) (string, error) {
-	key, err := model.GetKeyFromNames(topicFullName, pulsarURL)
+func (s *PulsarHandler) Delete(tenant, functionName string) (string, error) {
+	key, err := model.GetKeyFromNames(tenant, functionName)
 	if err != nil {
 		return "", err
 	}

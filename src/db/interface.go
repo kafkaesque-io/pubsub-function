@@ -13,15 +13,15 @@ var dbConn Db
 
 // Crud interface specifies typical CRUD opertaions for database
 type Crud interface {
-	GetByTopic(topicFullName, pulsarURL string) (*model.PulsarFunctionConfig, error)
-	GetByKey(hashedTopicKey string) (*model.PulsarFunctionConfig, error)
-	Update(topicCfg *model.PulsarFunctionConfig) (string, error)
-	Create(topicCfg *model.PulsarFunctionConfig) (string, error)
+	GetByTopic(topicFullName, pulsarURL string) (*model.FunctionConfig, error)
+	GetByKey(hashedTopicKey string) (*model.FunctionConfig, error)
+	Update(topicCfg *model.FunctionConfig) (string, error)
+	Create(topicCfg *model.FunctionConfig) (string, error)
 	Delete(topicFullName, pulsarURL string) (string, error)
 	DeleteByKey(hashedTopicKey string) (string, error)
 
 	// Load is invoked by the webhook.go to start new wekbooks and stop deleted ones
-	Load() ([]*model.PulsarFunctionConfig, error)
+	Load() ([]*model.FunctionConfig, error)
 }
 
 // Ops interface specifies required database access operations
@@ -41,6 +41,7 @@ type Db interface {
 // NewDb is a database factory pattern to create a new database
 func NewDb(reqDbType string) (Db, error) {
 	if dbConn != nil {
+		log.Infof("return existing db %s", reqDbType)
 		return dbConn, nil
 	}
 
@@ -71,6 +72,6 @@ var DocNotFound = "no document found"
 // DocAlreadyExisted means document already existed in the database when a new creation is requested
 var DocAlreadyExisted = "document already existed"
 
-func getKey(cfg *model.PulsarFunctionConfig) (string, error) {
+func getKey(cfg *model.FunctionConfig) (string, error) {
 	return cfg.Tenant + cfg.Name, nil
 }
